@@ -1,0 +1,30 @@
+name: Bot status (read-only)
+
+on:
+  workflow_dispatch:
+
+# Shows which account the token belongs to and which tournament questions are open /
+# already forecast. Read-only: no forecasts, no model spend.
+jobs:
+  status_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Status
+        run: |
+          uv run python tools/status.py 2>&1 | tee status.log || true
+          msg=$(grep -v -i "token" status.log | tail -n 40 | cut -c1-240 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::notice title=Bot status::${msg:-no output}"
+          cat status.log >> $GITHUB_STEP_SUMMARY
+        env:
+          METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}

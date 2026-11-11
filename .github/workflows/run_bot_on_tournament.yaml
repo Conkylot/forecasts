@@ -50,3 +50,9 @@ jobs:
         run: |
           msg=$(tail -n 30 bot.log 2>/dev/null | cut -c1-300 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
           echo "::error title=Bot failed::${msg:-no bot output captured}"
+      # Always show the end of the bot output (its run summary) on the run page.
+      - name: Show run summary
+        if: always()
+        run: |
+          msg=$(tail -n 25 bot.log 2>/dev/null | cut -c1-240 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::notice title=Bot run summary::${msg:-no bot output captured}"
