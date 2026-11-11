@@ -126,6 +126,26 @@ class FallTemplateBot2026(ForecastBot):
     _concurrency_limiter = asyncio.Semaphore(_max_concurrent_questions)
     _structure_output_validation_samples = 2
 
+    # Ensemble across model families: each of the predictions per question goes to the
+    # next model in this list, and the framework aggregates them (median). Diverse
+    # models were the most common trait of prize-winning bots. Ids checked against
+    # OpenRouter's model list on 2026-11-11.
+    FORECASTER_MODELS = [
+        "openrouter/anthropic/claude-sonnet-5.5",
+        "openrouter/openai/gpt-5.4",
+        "openrouter/x-ai/grok-4.7",
+    ]
+    _forecaster_index = 0
+
+    async def _invoke_forecaster(self, prompt: str) -> str:
+        model = self.FORECASTER_MODELS[
+            FallTemplateBot2026._forecaster_index % len(self.FORECASTER_MODELS)
+        ]
+        FallTemplateBot2026._forecaster_index += 1
+        llm = GeneralLlm(model=model, temperature=0.3, timeout=180, allowed_tries=2)
+        reasoning = await llm.invoke(prompt)
+        return f"[model: {model.removeprefix('openrouter/')}]\n{reasoning}"
+
     ##################################### RESEARCH #####################################
 
     async def run_research(self, question: MetaculusQuestion) -> str:
@@ -235,7 +255,7 @@ class FallTemplateBot2026(ForecastBot):
         question: BinaryQuestion,
         prompt: str,
     ) -> ReasonedPrediction[float]:
-        reasoning = await self.get_llm("default", "llm").invoke(prompt)
+        reasoning = await self._invoke_forecaster(prompt)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
         parsing_instructions = clean_indents(
             f"""
@@ -317,7 +337,7 @@ class FallTemplateBot2026(ForecastBot):
             {self._create_resolved_question_parsing_message()}
             """
         )
-        reasoning = await self.get_llm("default", "llm").invoke(prompt)
+        reasoning = await self._invoke_forecaster(prompt)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
         predicted_option_list: PredictedOptionList = await structure_output(
             text_to_structure=reasoning,
@@ -400,7 +420,7 @@ class FallTemplateBot2026(ForecastBot):
         question: NumericQuestion,
         prompt: str,
     ) -> ReasonedPrediction[NumericDistribution]:
-        reasoning = await self.get_llm("default", "llm").invoke(prompt)
+        reasoning = await self._invoke_forecaster(prompt)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
         parsing_instructions = clean_indents(
             f"""
@@ -496,7 +516,7 @@ class FallTemplateBot2026(ForecastBot):
         question: DateQuestion,
         prompt: str,
     ) -> ReasonedPrediction[NumericDistribution]:
-        reasoning = await self.get_llm("default", "llm").invoke(prompt)
+        reasoning = await self._invoke_forecaster(prompt)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
         parsing_instructions = clean_indents(
             f"""
@@ -693,15 +713,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["tournament", "metaculus_cup", "test_questions"],
+        choices=["tournament", "metaculus_cup", "test_questions", "smoke"],
         default="tournament",
         help="What to forecast on (default: tournament)",
     )
     args = parser.parse_args()
-    run_mode: Literal["tournament", "metaculus_cup", "test_questions"] = args.mode
+    run_mode: Literal["tournament", "metaculus_cup", "test_questions", "smoke"] = args.mode
 
     check_environment(strict=True)
-    publish_to_metaculus = True
+    publish_to_metaculus = run_mode != "smoke"
     print_startup_banner(run_mode, will_publish=publish_to_metaculus)
 
     # Configure the bot. The `llms=` block below is commented out to use
@@ -771,6 +791,16 @@ if __name__ == "__main__":
             template_bot.forecast_on_tournament(
                 client.CURRENT_METACULUS_CUP_ID, return_exceptions=True
             )
+        )
+    elif run_mode == "smoke":
+        # One question from the bot testing area, nothing published: a cheap check
+        # that every model call and parser works before changes reach the tournament.
+        template_bot.skip_previously_forecasted_questions = False
+        smoke_questions = client.get_all_open_questions_from_tournament(
+            "bot-testing-area"
+        )[:1]
+        forecast_reports = asyncio.run(
+            template_bot.forecast_questions(smoke_questions, return_exceptions=True)
         )
     elif run_mode == "test_questions":
         # The bot-testing-area tournament contains all question types and is

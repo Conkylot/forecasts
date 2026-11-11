@@ -1,0 +1,32 @@
+name: Smoke test (1 question, not published)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Run bot on one test question
+        run: |
+          set -o pipefail
+          uv run python main.py --mode smoke 2>&1 | tee bot.log
+        env:
+          METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      - name: Show models used and result
+        if: always()
+        run: |
+          msg=$( (grep -o "\[model: [^]]*\]" bot.log | sort | uniq -c; grep -i -E "prediction|error|exception" bot.log | tail -n 15) | cut -c1-240 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::notice title=Smoke result::${msg:-no output}"
