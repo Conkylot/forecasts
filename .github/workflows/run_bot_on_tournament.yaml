@@ -30,7 +30,8 @@ jobs:
         run: uv sync --locked
       - name: Run bot
         run: |
-          uv run python main.py
+          set -o pipefail
+          uv run python main.py 2>&1 | tee bot.log
         # this reads the environment variables from the github repository.
         # Store under Settings --> Secrets and variables --> Actions
         env:
@@ -42,3 +43,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ASKNEWS_CLIENT_ID: ${{ secrets.ASKNEWS_CLIENT_ID }}
           ASKNEWS_SECRET: ${{ secrets.ASKNEWS_SECRET }}
+      # On failure, put the end of the bot output into a run annotation so the cause
+      # is visible from the run page and the API without downloading the full log.
+      - name: Surface failure reason
+        if: failure()
+        run: |
+          msg=$(tail -n 30 bot.log 2>/dev/null | cut -c1-300 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=Bot failed::${msg:-no bot output captured}"
