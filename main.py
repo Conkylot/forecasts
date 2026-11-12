@@ -135,13 +135,18 @@ class FallTemplateBot2026(ForecastBot):
         "openrouter/openai/gpt-5.4",
         "openrouter/x-ai/grok-4.7",
     ]
-    _forecaster_index = 0
+    # The rotation restarts for every question. A single counter shared across
+    # questions gave each one an uneven 2/2/1 split whose short model changed from
+    # question to question, so the median leaned on an arbitrary pair of families.
+    # Keep predictions_per_research_report a multiple of len(FORECASTER_MODELS).
+    _forecaster_calls: dict[str, int] = {}
 
-    async def _invoke_forecaster(self, prompt: str) -> str:
-        model = self.FORECASTER_MODELS[
-            FallTemplateBot2026._forecaster_index % len(self.FORECASTER_MODELS)
-        ]
-        FallTemplateBot2026._forecaster_index += 1
+    async def _invoke_forecaster(self, prompt: str, question: MetaculusQuestion) -> str:
+        # Keyed on the text too: a conditional's sub-questions share one page_url.
+        key = f"{question.page_url}|{question.question_text}"
+        n = self._forecaster_calls.get(key, 0)
+        self._forecaster_calls[key] = n + 1
+        model = self.FORECASTER_MODELS[n % len(self.FORECASTER_MODELS)]
         llm = GeneralLlm(model=model, temperature=0.3, timeout=180, allowed_tries=2)
         reasoning = await llm.invoke(prompt)
         return f"[model: {model.removeprefix('openrouter/')}]\n{reasoning}"
@@ -255,7 +260,7 @@ class FallTemplateBot2026(ForecastBot):
         question: BinaryQuestion,
         prompt: str,
     ) -> ReasonedPrediction[float]:
-        reasoning = await self._invoke_forecaster(prompt)
+        reasoning = await self._invoke_forecaster(prompt, question)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
         parsing_instructions = clean_indents(
             f"""
@@ -337,7 +342,7 @@ class FallTemplateBot2026(ForecastBot):
             {self._create_resolved_question_parsing_message()}
             """
         )
-        reasoning = await self._invoke_forecaster(prompt)
+        reasoning = await self._invoke_forecaster(prompt, question)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
         predicted_option_list: PredictedOptionList = await structure_output(
             text_to_structure=reasoning,
@@ -420,7 +425,7 @@ class FallTemplateBot2026(ForecastBot):
         question: NumericQuestion,
         prompt: str,
     ) -> ReasonedPrediction[NumericDistribution]:
-        reasoning = await self._invoke_forecaster(prompt)
+        reasoning = await self._invoke_forecaster(prompt, question)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
         parsing_instructions = clean_indents(
             f"""
@@ -516,7 +521,7 @@ class FallTemplateBot2026(ForecastBot):
         question: DateQuestion,
         prompt: str,
     ) -> ReasonedPrediction[NumericDistribution]:
-        reasoning = await self._invoke_forecaster(prompt)
+        reasoning = await self._invoke_forecaster(prompt, question)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
         parsing_instructions = clean_indents(
             f"""
@@ -729,7 +734,7 @@ if __name__ == "__main__":
     # uncomment and edit to pin specific models.
     template_bot = FallTemplateBot2026(
         research_reports_per_question=1,
-        predictions_per_research_report=5,
+        predictions_per_research_report=6,  # 2 per forecaster model; see FORECASTER_MODELS
         use_research_summary_to_forecast=False,
         publish_reports_to_metaculus=publish_to_metaculus,
         folder_to_save_reports_to=None,
