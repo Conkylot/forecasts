@@ -344,13 +344,30 @@ class FallTemplateBot2026(ForecastBot):
         )
         reasoning = await self._invoke_forecaster(prompt, question)
         logger.info(f"Reasoning for URL {question.page_url}: {reasoning}")
-        predicted_option_list: PredictedOptionList = await structure_output(
-            text_to_structure=reasoning,
-            output_type=PredictedOptionList,
-            model=self.get_llm("parser", "llm"),
-            num_validation_samples=self._structure_output_validation_samples,
-            additional_instructions=parsing_instructions,
-        )
+        # The parser can return a list missing options (46468 on 2026-11-13 came back
+        # as only "Other result"). Aggregation then rejects the whole question, so check
+        # each parse here: re-parse once, and if it is still wrong, fail only this one
+        # prediction. The framework drops failed predictions and aggregates the rest.
+        expected = set(question.options)
+        for attempt in (1, 2):
+            predicted_option_list: PredictedOptionList = await structure_output(
+                text_to_structure=reasoning,
+                output_type=PredictedOptionList,
+                model=self.get_llm("parser", "llm"),
+                num_validation_samples=self._structure_output_validation_samples,
+                additional_instructions=parsing_instructions,
+            )
+            got = [o.option_name for o in predicted_option_list.predicted_options]
+            if set(got) == expected and len(got) == len(expected):
+                break
+            logger.warning(
+                f"Parse attempt {attempt} for {question.page_url} returned options "
+                f"{got}, expected {question.options}"
+            )
+        else:
+            raise ValueError(
+                f"Parsed options {got} do not match the question's {question.options}"
+            )
 
         logger.info(
             f"Forecasted URL {question.page_url} with prediction: {predicted_option_list}."
