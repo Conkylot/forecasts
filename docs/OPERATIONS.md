@@ -45,6 +45,17 @@ Two other signs that it has stopped: the Actions tab shows only `schedule` runs 
 apart, and no `workflow_dispatch` runs. To renew, create a new token with the same scope and
 re-run the installer.
 
+### Independent monitor (since 2026-11-13)
+
+A cron on the Hermes server (Ubuntu VPS, not the Mac) closes the silent-failure gap from the
+outside: `/root/forecasts-ops/monitor.py` runs every 15 minutes and checks via the GitHub API that
+(a) a `workflow_dispatch` run appeared within the last 45 minutes (≈ two missed trigger slots) and
+(b) the latest completed run concluded `success`. On failure it sends a Telegram alert (edge-triggered,
+repeats every 6 h while bad, one recovery message when healthy). State/logs: `/root/forecasts-ops/`.
+It is read-only against this repo. If the monitor itself goes quiet, check the server crontab
+(`crontab -l` → the `forecasts-ops` line).
+
+
 ## How a forecast is made
 
 `main.py`, class `FallTemplateBot2026`:
