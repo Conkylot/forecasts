@@ -28,3 +28,7 @@ Never commit `.env`; it is git-ignored.
 
 ## Kill rule
 If the bot is not above average in MiniBench after three rounds, stop.
+
+## Operations
+How it runs day to day (external trigger, ensemble, past fixes, how to check results):
+see `docs/OPERATIONS.md`.
