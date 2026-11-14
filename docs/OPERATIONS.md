@@ -76,8 +76,9 @@ pointed at a model OpenRouter no longer serves, which is why every model is pinn
 ## Changes and why (newest first)
 
 - **2026-11-14: trigger token rotated, after a 13 h silent outage.** From 2026-11-13 18:44Z to
-  2026-11-14 07:40Z every trigger call returned `401` (the old token had been revoked) and
-  nothing alerted. GitHub's fallback schedule ran 3 times in the gap. No question was missed,
+  2026-11-14 07:40Z every trigger call returned `401` (the old token had been revoked). The trigger
+  itself raises no alert. Whether the independent monitor above (live from 18:42Z) sent its
+  Telegram alert was not confirmed when this was written: that outage was its first real test. GitHub's fallback schedule ran 3 times in the gap. No question was missed,
   but only because none opened and closed inside it. **When rotating, install the new token
   before revoking the old one.**
 
