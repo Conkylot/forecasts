@@ -4,7 +4,7 @@ How this bot actually runs, what has gone wrong, and how to check on it. `SETUP.
 first-time setup. This file is what was learned after it. Keep it current: when something here
 stops being true, fix or delete the line.
 
-Last updated 2026-11-13.
+Last updated 2026-11-14.
 
 ## What runs, and what starts it
 
@@ -74,6 +74,12 @@ Model ids were checked against OpenRouter's model list on 2026-11-11. The librar
 pointed at a model OpenRouter no longer serves, which is why every model is pinned.
 
 ## Changes and why (newest first)
+
+- **2026-11-14: trigger token rotated, after a 13 h silent outage.** From 2026-11-13 18:44Z to
+  2026-11-14 07:40Z every trigger call returned `401` (the old token had been revoked) and
+  nothing alerted. GitHub's fallback schedule ran 3 times in the gap. No question was missed,
+  but only because none opened and closed inside it. **When rotating, install the new token
+  before revoking the old one.**
 
 - **2026-11-13: each multiple-choice parse is checked against the question's options.** On
   question 46468, one of the six parses came back as only `"Other result"`. Aggregation
